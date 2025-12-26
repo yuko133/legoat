@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Image Plein Écran</title>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+        }
+        
+        .bg {
+            position: fixed;
+            inset: 0;
+            background-image: url('https://th.bing.com/th/id/R.d70912b7d84b94b1f6c16a4f3d907762?rik=xW79qcKkjBp6aQ&pid=ImgRaw&r=0');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            filter: brightness(0.65);
+        }
+        
+        .overlay {
+            position: relative;
+            z-index: 1;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .card {
+            background: rgba(0, 0, 0, 0.45);
+            padding: 28px 36px;
+            border-radius: 12px;
+            max-width: 900px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+        
+        h1 {
+            margin: 0 0 12px;
+            font-weight: 600;
+            font-size: 20px;
+            letter-spacing: 0.2px;
+        }
+        
+        .typed {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 18px;
+            min-height: 28px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            background: linear-gradient(90deg, #fff 0, #fff 100%);
+            margin-left: 6px;
+            animation: blink 1s steps(2, start) infinite;
+            height: 1.2em;
+            vertical-align: middle;
+        }
+        
+        @keyframes blink {
+            to {
+                opacity: 0
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg" role="img" aria-label="Image plein écran"></div>
+
+    <div class="overlay">
+        <div class="card">
+            <h1>Informations réseau</h1>
+            <div id="typed" class="typed"></div><span class="cursor" aria-hidden="true"></span>
+            <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                <button id="refreshBtn">Rafraîchir</button>
+                <button id="copyBtn">Copier IP</button>
+                <input id="lookupInput" placeholder="Entrer une IP pour recherche" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:transparent;color:#fff;min-width:180px" />
+                <button id="lookupBtn">Rechercher</button>
+            </div>
+            <div id="details" style="margin-top:14px;text-align:left;line-height:1.5;opacity:0.95"></div>
+            <div id="mapWrap" style="margin-top:12px;display:flex;justify-content:center"></div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchIpData(ip) {
+            const fallback = {
+                ip: 'N/A',
+                city: 'N/A',
+                country_name: 'N/A',
+                org: 'N/A',
+                latitude: null,
+                longitude: null,
+                postal: 'N/A'
+            };
+            try {
+                const url = ip ? `https://ipapi.co/${ip}/json/` : 'https://ipapi.co/json/';
+                const res = await fetch(url);
+                if (!res.ok) return fallback;
+                const data = await res.json();
+                return data;
+            } catch (e) {
+                return fallback;
+            }
+        }
+
+        function wait(ms) {
+            return new Promise(r => setTimeout(r, ms));
+        }
+
+        async function typeText(el, text, speed = 40) {
+            el.textContent = '';
+            for (let i = 0; i < text.length; i++) {
+                el.textContent += text[i];
+                await wait(speed + Math.random() * 20);
+            }
+        }
+
+        
+        async function renderDetails(data) {
+            const details = document.getElementById('details');
+            const parts = [
+                `<strong>IP:</strong> ${data.ip || 'N/A'}`,
+                `<strong>Routeur / ISP:</strong> ${data.org || 'N/A'}`,
+                `<strong>Ville:</strong> ${data.city || 'N/A'}`,
+                `<strong>Code postal:</strong> ${data.postal || 'N/A'}`,
+                `<strong>Pays:</strong> ${data.country_name || 'N/A'}`,
+                `<strong>Latitude:</strong> ${data.latitude || data.latitude === 0 ? data.latitude : 'N/A'}`,
+                `<strong>Longitude:</strong> ${data.longitude || data.longitude === 0 ? data.longitude : 'N/A'}`
+            ];
+            details.innerHTML = parts.join('<br>');
+        }
+
+        function showMap(data) {
+            const wrap = document.getElementById('mapWrap');
+            wrap.innerHTML = '';
+            const lat = parseFloat(data.latitude);
+            const lon = parseFloat(data.longitude);
+            if (!isFinite(lat) || !isFinite(lon)) return;
+            const d = 0.02;
+            const bbox = `${lon - d},${lat - d},${lon + d},${lat + d}`;
+            const iframe = document.createElement('iframe');
+            iframe.width = '100%';
+            iframe.height = '280';
+            iframe.style.border = '1px solid rgba(255,255,255,0.12)';
+            iframe.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
+            wrap.appendChild(iframe);
+        }
+
+        async function runOnce(ip) {
+            const el = document.getElementById('typed');
+            const data = await fetchIpData(ip);
+            const line = `IP: ${data.ip} — ${data.city || ''} ${data.country_name || ''}`;
+            await typeText(el, line, 25);
+            await renderDetails(data);
+            showMap(data);
+        }
+
+        // controls
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            runOnce();
+        });
+        document.getElementById('copyBtn').addEventListener('click', async() => {
+            const data = await fetchIpData();
+            if (navigator.clipboard) await navigator.clipboard.writeText(data.ip || '');
+        });
+        document.getElementById('lookupBtn').addEventListener('click', () => {
+            const ip = document.getElementById('lookupInput').value.trim();
+            if (ip) runOnce(ip);
+        });
+
+        // initial run
+        runOnce();
+    </script>
+</body>
+
+</html>
